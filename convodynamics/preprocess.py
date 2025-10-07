@@ -6,6 +6,17 @@ from pyannote.audio import Pipeline
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+def remove_shortest_speaker(segments: pd.DataFrame):
+    
+    """
+    Remove the speaker with the shortest total speaking time from the segments DataFrame.
+    """
+
+    shortest_speaker = segments.groupby("speaker")["duration"].sum().idxmin()
+    segments = segments[segments["speaker"] != shortest_speaker]
+    
+    return segments
+
 def diarize_audio(
     audio_path: str,
     diarization_model: str = "pyannote/speaker-diarization-3.1"):
@@ -33,3 +44,10 @@ def diarize_audio(
 
     segments = pd.DataFrame(segments)
     return segments, total_duration
+
+
+def main():
+    pass
+
+if __name__ == "__main__":
+    main()

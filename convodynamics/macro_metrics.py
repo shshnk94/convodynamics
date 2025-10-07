@@ -1,12 +1,11 @@
 import os
 from argparse import ArgumentParser
-
-from base import Feature
-from typing import Any, Dict
-
+from typing import Dict
 import pandas as pd
 
-from preprocess import diarize_audio
+from preprocess import diarize_audio, remove_shortest_speaker
+from utils import adaptability, predictability
+from feature import Feature
 
 class SpeakingTime(Feature):
 
@@ -15,7 +14,7 @@ class SpeakingTime(Feature):
 
     def extract(
         self, 
-        segments: pd.DataFrame,
+        conversation: pd.DataFrame,
         total_duration: float) -> Dict[str, float]:
 
         """
@@ -23,9 +22,12 @@ class SpeakingTime(Feature):
         Returns a dictionary with participant IDs as keys and their speaking times as values.
         """
 
-        speaking_time = segments.groupby("speaker")["duration"].sum() * 100 / total_duration
-        speaking_time = speaking_time.to_dict()
-        return speaking_time
+        speaking_time = conversation.groupby("speaker")["duration"].sum() * 100 / total_duration
+
+        return self._format_results(
+            speaker_metrics={"speaking_time": speaking_time},
+            speakers=conversation['speaker'].unique()
+        )
 
 class TurnLength(Feature):
 
@@ -34,20 +36,38 @@ class TurnLength(Feature):
 
     def extract(
         self, 
-        segments: pd.DataFrame) -> Dict[str, float]:
+        conversation: pd.DataFrame) -> Dict[str, float]:
 
         """
         Extract the average turn length for each participant in the conversation.
         Returns a dictionary with participant IDs as keys and their average turn lengths as values.
         """
 
-        median = segments.groupby('speaker')['duration'].median()
-        mean = segments.groupby('speaker')['duration'].mean()
-        cov = segments.groupby('speaker')['duration'].std() / mean
-                
-        turn_length = segments.groupby('speaker')['duration'].mean()
-        turn_length = turn_length.to_dict()
-        return turn_length
+        median = conversation.groupby('speaker')['duration'].median()
+
+        mean = conversation.groupby('speaker')['duration'].mean()
+        cv = conversation.groupby('speaker')['duration'].std() / mean
+
+        speakers = conversation['speaker'].unique()
+        speaker_a, speaker_b = (
+            conversation.loc[conversation['speaker'] == speakers[0], "duration"], 
+            conversation.loc[conversation['speaker'] == speakers[1], "duration"]
+        )        
+        
+        return self._format_results(
+            speaker_metrics={
+                "turn_length_median": median,
+                "turn_length_mean": mean,
+                "turn_length_cv": cv,
+                "turn_length_predictability": pd.Series({
+                    speakers[0]: predictability(speaker_a),
+                    speakers[1]: predictability(speaker_b)
+                })
+            },
+            conversation_metrics={"turn_length_adaptability": adaptability(speaker_a, speaker_b)},
+            speakers=speakers
+        )
+
 
 class Pauses(Feature):
 
@@ -56,20 +76,22 @@ class Pauses(Feature):
 
     def extract(
         self, 
-        segments: pd.DataFrame,
-        total_duration: float) -> Dict[str, float]:
+        conversation: pd.DataFrame, 
+        total_duration: float):
 
         """
-        Extract the average pause duration between turns for each participant in the conversation.
-        Returns a dictionary with participant IDs as keys and their average pause durations as values.
+        Extract the average pause percentage for each participant in the conversation.
         """
 
-        segments = segments.sort_values(by='start')
-        segments['pause'] = segments['start'].shift(-1) - segments['end']
-
-        pauses = segments.groupby('speaker')['pause'].mean().dropna() * 100 / total_duration
-        pauses = pauses.to_dict()
-        return pauses
+        conversation['pause'] = conversation['start'].shift(-1) - conversation['end']
+        
+        avg_pause_pct = conversation.groupby('speaker')['pause'].mean().dropna() * 100 / total_duration
+        speakers = conversation['speaker'].unique()
+        
+        return self._format_results(
+            speaker_metrics={"avg_pause_pct": avg_pause_pct},
+            speakers=speakers
+    )
 
 if __name__ == "__main__":
 
@@ -79,17 +101,20 @@ if __name__ == "__main__":
 
     ## Example with a random conversation ##
     random_conversation = "67836c1d-1334-41a0-a33a-4f788e8b6fb3"
-    segments, total_duration = diarize_audio(random_conversation)
+    audio_path = os.path.join(
+        args.datapath, 
+        random_conversation, 
+        f"processed/{random_conversation}.mp3"
+    )
+    segments, total_duration = diarize_audio(audio_path)
 
-    # Drop the speaker with the shortest total duration
-    speaker_durations = segments.groupby("speaker")["duration"].sum()
-    shortest_speaker = speaker_durations.idxmin()
-    segments = segments[segments["speaker"] != shortest_speaker]
+    ## Remove the shortest speaker ##
+    segments = remove_shortest_speaker(segments)
 
     ## Setup all metrics ##
-    speaking_time = SpeakingTime()(segments, total_duration)
+    speaking_time = SpeakingTime()(segments, total_duration=total_duration)
     turn_length = TurnLength()(segments)
-    pauses = Pauses()(segments, total_duration)
+    pauses = Pauses()(segments, total_duration=total_duration)
 
     print("Speaking Time: ", speaking_time)
     print("Turn Length: ", turn_length)
