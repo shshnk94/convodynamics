@@ -9,7 +9,7 @@ def adaptability(
     Calculate the adaptibility between two speakers using Spearman correlation.
     """
 
-    return speaker_a.corr(speaker_b, method="spearman")
+    return speaker_a.reset_index(drop=True).corr(speaker_b.reset_index(drop=True), method='spearman')
 
 def predictability(
     speaker: pd.Series

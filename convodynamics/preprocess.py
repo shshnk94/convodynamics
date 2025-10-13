@@ -1,3 +1,4 @@
+from pathlib import Path
 import pandas as pd
 
 import torch
@@ -45,9 +46,9 @@ def diarize_audio(
     segments = pd.DataFrame(segments)
     return segments, total_duration
 
+def load_transcript(conversation_path: str):
 
-def main():
-    pass
+    transcript_path = Path(conversation_path) / "transcription" / "transcript_audiophile.csv"
+    transcript = pd.read_csv(transcript_path)
 
-if __name__ == "__main__":
-    main()
+    return transcript
