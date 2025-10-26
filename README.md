@@ -11,6 +11,8 @@ pip install -r requirements.txt
 pip install .
 ```
 
+Write about Huggingface Hub registerations as well
+
 ## Usage
 
 After installation, you can extract macro features from a conversation file:
