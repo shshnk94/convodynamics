@@ -3,7 +3,25 @@ import pandas as pd
 from convokit import Corpus
 from convokit.transformer import Transformer
 
-from .metrics import Feature
+from .metrics import (
+    Feature, 
+    TurnLength,
+    SpeakingTime,
+    Pauses,
+    SpeakerRate,
+    Backchannels,
+    ResponseTime
+)
+
+# simple registry to allow registering by name (case/format agnostic)
+_METRICS_REGISTRY = {
+    "speaking_time": SpeakingTime,
+    "turn_length": TurnLength,
+    "pauses": Pauses,
+    "speaker_rate": SpeakerRate,
+    "backchannels": Backchannels,
+    "response_time": ResponseTime,
+}
 
 class ConversationDynamicsTransformer(Transformer):
 
@@ -13,14 +31,24 @@ class ConversationDynamicsTransformer(Transformer):
 
     def register_metrics(
         self,
-        metrics: List[Feature]
+        metrics: List[str]
     ) -> None:
         
         """
         Register a list of feature extraction metrics.
         """
 
-        self.metrics = metrics
+        self.metrics = []
+        for metric_name in metrics:
+
+            # some robustness in matching metric names
+            metric_name = metric_name.lower().strip()
+            if metric_name in _METRICS_REGISTRY:
+                metric = _METRICS_REGISTRY[metric_name]()
+                self.metrics.append(metric)
+
+            else:
+                raise ValueError(f"Metric '{metric_name}' not recognized. Available metrics: {list(_METRICS_REGISTRY.keys())}")
 
     def remove_shortest_speaker(
         self, 
@@ -48,6 +76,8 @@ class ConversationDynamicsTransformer(Transformer):
             # if diarization segments are available, we will use them
             if segments is not None:
 
+                total_duration = conversation.retrieve_meta("total_duration")
+
                 # remove shortest speaker -- usually noise
                 if segments['speaker'].nunique() > 2:
                     segments = self.remove_shortest_speaker(segments)
@@ -60,7 +90,7 @@ class ConversationDynamicsTransformer(Transformer):
     
                     metrics[metric_name] = metric(
                         conversation=segments,
-                        total_duration=segments['end'].max()
+                        total_duration=total_duration
                     ) 
 
             # if no diarization segments, we will use the utterance transcripts
@@ -76,7 +106,6 @@ class ConversationDynamicsTransformer(Transformer):
 
                     metrics[metric_name] = metric(conversation=transcripts)
 
-            print("Extracted features:", metrics)
-            break
+            conversation.add_meta("conversation_dynamics_features", metrics)
         
         return corpus

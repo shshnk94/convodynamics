@@ -41,7 +41,7 @@ class SpeechDiarizationTransformer(Transformer):
             })
 
         segments = pd.DataFrame(segments)
-        return segments
+        return segments, total_duration
 
     def transform(
         self, 
@@ -51,7 +51,9 @@ class SpeechDiarizationTransformer(Transformer):
         for conversation in corpus.iter_conversations():
 
             audio_file = conversation.retrieve_meta("audio_file")
-            segments = self._diarize_conversation(audio_file)
+            segments, total_duration = self._diarize_conversation(audio_file)
+            
             conversation.add_meta("diarization_segments", segments)
+            conversation.add_meta("total_duration", total_duration)
 
         return corpus

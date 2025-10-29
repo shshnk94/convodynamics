@@ -47,6 +47,14 @@ if __name__ == "__main__":
 
     # extract conversation dynamics features from Di Stasi et al (2024)
     dynamics_extractor = ConversationDynamicsTransformer()
+    dynamics_extractor.register_metrics([
+        "speaking_time",
+        "turn_length",
+        "pauses",
+        # "speaker_rate",
+        "backchannels",
+        "response_time"
+    ])
     corpus = dynamics_extractor.transform(corpus)
 
     # random conversation to check features
